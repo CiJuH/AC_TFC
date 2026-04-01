@@ -8,3 +8,4 @@ dist/
 .pytest_cache/
 .mypy_cache/
 all_models.txt
+CLAUDE.md
