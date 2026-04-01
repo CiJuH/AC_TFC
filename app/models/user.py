@@ -1,13 +1,27 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 from sqlalchemy import String, Boolean, Float, DateTime, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.models.mixins import TimestampMixin, UUIDMixin
 import enum
 
+if TYPE_CHECKING:
+    from app.models.island import Island
+    from app.models.queue_users import QueueUser
+    from app.models.visit import Visit
+    from app.models.review import Review
+    from app.models.report import Report
+    from app.models.ban import Ban
+    from app.models.strike import Strike
+    from app.models.friendship import Friendship
+    from app.models.chat import Chat
+    from app.models.private_message import PrivateMessage
+
 
 class UserRole(str, enum.Enum):
     admin = "admin"
+    mod = "mod"
     visitor = "visitor"
     # "host" is not stored — it's derived: user is host if they have an active queue
 
@@ -39,7 +53,7 @@ class User(UUIDMixin, TimestampMixin, Base):
 
     # Relationships
     islands: Mapped[list["Island"]] = relationship("Island", back_populates="user")
-    queue_entries = relationship("QueueUser", back_populates="user")
+    queue_entries: Mapped[list["QueueUser"]] = relationship("QueueUser", back_populates="user")
     visits: Mapped[list["Visit"]] = relationship("Visit", back_populates="user")
     reviews_given: Mapped[list["Review"]] = relationship(
         "Review", back_populates="reviewer", foreign_keys="Review.reviewer_id"
