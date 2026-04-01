@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.api.v1.dependencies import get_current_user
 from app.models.user import User
 from app.models.island import Island
+from app.models.queue import Queue, QueueStatus
 from app.schemas.island import IslandCreate, IslandUpdate, IslandResponse
 
 router = APIRouter(prefix="/islands", tags=["islands"])
@@ -87,5 +88,15 @@ async def delete_my_island(
     if not island:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="You don't have an island")
 
-    island.deleted_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    island.deleted_at = now
+
+    # Close any open queues belonging to this island
+    result = await db.execute(
+        select(Queue).where(Queue.island_id == island.id, Queue.closed_at.is_(None))
+    )
+    for queue in result.scalars().all():
+        queue.status = QueueStatus.closed
+        queue.closed_at = now
+
     await db.commit()

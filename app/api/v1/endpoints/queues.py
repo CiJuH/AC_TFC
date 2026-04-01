@@ -36,6 +36,18 @@ async def _get_queue_as_host(db: AsyncSession, queue_id: uuid.UUID, user_id: uui
     return queue
 
 
+@router.get("/my", response_model=list[QueueResponse])
+async def get_my_queues(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    island = await _get_user_island(db, current_user.id)
+    result = await db.execute(
+        select(Queue).where(Queue.island_id == island.id).order_by(Queue.created_at.desc())
+    )
+    return result.scalars().all()
+
+
 @router.post("", response_model=QueueResponse, status_code=status.HTTP_201_CREATED)
 async def create_queue(
     body: QueueCreate,
