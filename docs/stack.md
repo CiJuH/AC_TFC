@@ -69,6 +69,23 @@ Ejemplo: el modelo `User` tiene `password_hash`, pero el schema `UserResponse` n
 
 **En este proyecto:** también usada en `app/core/config.py` (`BaseSettings`) para cargar variables de entorno del `.env`.
 
+### Tipos de schema por recurso
+
+Cada recurso puede tener hasta tres schemas, dependiendo de quién lo crea y cómo:
+
+- **`Create`** — datos que el usuario envía para crear el recurso (sin `id`, sin campos generados por el servidor).
+- **`Update`** — campos modificables, todos opcionales.
+- **`Response`** — lo que devuelve la API (incluye `id`, timestamps, etc.).
+
+Qué schemas tiene cada recurso depende de su naturaleza:
+
+| Schemas | Cuándo | Ejemplo |
+|---|---|---|
+| Solo `Response` | El servidor crea el recurso automáticamente por lógica, no hay endpoint de creación directa | `Visit`, `Strike` |
+| `Create` + `Response` | El usuario lo crea pero no puede editarlo | `Report`, `QueueMessage` |
+| `Create` + `Update` + `Response` | El usuario lo crea y también puede modificarlo | `Island`, `Queue`, `Friendship` |
+| `Update` + `Response` | La creación va por un flujo especial (ej: OAuth), pero sí se puede editar | `User` |
+
 ---
 
 ## PostgreSQL
