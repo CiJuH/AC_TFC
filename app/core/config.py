@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # JWT
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ALGORITHM: str = "HS256"
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # CORS
