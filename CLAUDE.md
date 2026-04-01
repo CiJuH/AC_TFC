@@ -18,8 +18,15 @@ intercambiar objetos, visitar islas con catálogos especiales.
 
 ## Estado actual del backend
 - Modelos SQLAlchemy: ✅ finalizados
-- Migraciones Alembic: ✅ migración inicial aplicada (14 tablas)
-- Siguiente paso: schemas Pydantic + endpoints
+- Schemas Pydantic: ✅ finalizados (`app/schemas/`)
+- Migraciones Alembic: ✅ migración inicial limpia (`589de32e1e4c`)
+- Endpoints implementados:
+  - `auth`: register, login, refresh, Discord OAuth, Google OAuth ✅
+  - `users`: GET/PATCH/DELETE /me, GET /{id} ✅
+  - `islands`: CRUD isla propia, GET /{id} ✅
+  - `queues`: crear, listar, GET/PATCH /{id}, cerrar, GET /my ✅
+  - `queue_users`: join, leave, list participants, update status ✅
+- Siguiente paso: visits + reviews
 
 ## Modelo de datos (dbml)
 ```
@@ -34,7 +41,7 @@ Table User {
   is_active bool
   is_deleted bool
   deleted_at datetime (nullable)
-  role (admin/visitor)
+  role (admin/mod/visitor)
   created_at, updated_at
 }
 
@@ -82,9 +89,10 @@ Table QueueUser {
   id uuid
   queue_id uuid FK
   user_id uuid FK
-  status (waiting/visiting/done/skipped/left)
+  status (waiting/visiting/skipped/done/left/kicked)
   created_at, updated_at
   -- posición calculada por created_at, no almacenada
+  -- índice en status para consultas eficientes
   UniqueConstraint(queue_id, user_id)
 }
 
@@ -125,7 +133,7 @@ Table Strike {
   reason (no_confirmation/kicked_by_host)
   created_at datetime
   -- 3 strikes en 7 días = ban automático de 24h
-  -- strike por no_confirmation solo se aplica a partir del 2º skip en la misma cola
+  -- strike por no_confirmation se aplica al 2º skip en la misma cola (el 1º es segunda oportunidad)
 }
 
 Table Friendship {
@@ -177,7 +185,9 @@ Table QueueMessage {
 - `is_host` no se almacena ni se deriva en User — se calcula en el servicio con una query eficiente
 - `dodo_code` vive como columna en Queue, en claro — los códigos son temporales y no tienen valor fuera de contexto
 - `turnip_price`, `category` y `description` viven en Queue, no en Island — cada cola es un evento con su propio contexto; Island solo guarda la info permanente de la isla
-- `position` en QueueUser no se almacena — se calcula por `created_at`
+- `position` en QueueUser no se almacena — orden de cola: `skipped` primero, luego `waiting` por `created_at`
+- `skipped` es un estado temporal (primera vez que se salta a alguien) — si vuelve a ser saltado, pasa a `kicked` + Strike
+- `kicked` es terminal (expulsado tras 2º skip); `left` es salida voluntaria
 - `expires_at = None` en Ban implica ban permanente — no hay campo `is_permanent`
 - `deleted_at = None` en Island implica isla activa — no hay campo `is_active`
 - Las reviews son sobre el usuario (host), no sobre la isla — la visita es el "ticket" que habilita la review

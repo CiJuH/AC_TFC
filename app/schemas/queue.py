@@ -8,6 +8,11 @@ class QueueCreate(BaseModel):
     category: QueueCategory
     dodo_code: str
     turnip_price: int | None = None  # required if category = turnips
+    description: str | None = None
+    limit: int = 10
+    requires_fee: bool = False
+    fee_description: str | None = None
+    visit_ends_at: datetime | None = None
 
     @field_validator("dodo_code")
     @classmethod
@@ -15,11 +20,13 @@ class QueueCreate(BaseModel):
         if len(v) != 5:
             raise ValueError("Dodo code must be exactly 5 characters")
         return v.upper()
-    description: str | None = None
-    limit: int = 10
-    requires_fee: bool = False
-    fee_description: str | None = None
-    visit_ends_at: datetime | None = None
+
+    @field_validator("limit")
+    @classmethod
+    def limit_must_be_valid(cls, v: int) -> int:
+        if not 1 <= v <= 100:
+            raise ValueError("Limit must be between 1 and 100")
+        return v
 
 
 class QueueUpdate(BaseModel):
@@ -34,6 +41,13 @@ class QueueUpdate(BaseModel):
         if v is not None and len(v) != 5:
             raise ValueError("Dodo code must be exactly 5 characters")
         return v.upper() if v else v
+
+    @field_validator("limit")
+    @classmethod
+    def limit_must_be_valid(cls, v: int | None) -> int | None:
+        if v is not None and not 1 <= v <= 100:
+            raise ValueError("Limit must be between 1 and 100")
+        return v
 
 
 class QueueResponse(BaseModel):
