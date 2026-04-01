@@ -15,12 +15,11 @@ class Ban(UUIDMixin, TimestampMixin, Base):
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     ban_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    is_permanent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # None = permanent
 
     # Relationships
     user = relationship("User", back_populates="ban", foreign_keys=[user_id])
-    banned_by_id = relationship("User", foreign_keys=[banned_by_id])
+    banned_by = relationship("User", foreign_keys=[banned_by_id])
 
     def __repr__(self) -> str:
         return f"<Ban user={self.user_id} active={self.is_active}>"

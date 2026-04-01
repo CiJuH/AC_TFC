@@ -20,9 +20,9 @@ class Review(UUIDMixin, TimestampMixin, Base):
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
-    visit = relationship("Visit", back_populates="review")
-    reviewer = relationship("User", back_populates="reviews_given", foreign_keys=[reviewer_id])
-    reviewed = relationship("User", back_populates="reviews_received", foreign_keys=[reviewed_id])
+    visit: Mapped["Visit"] = relationship("Visit", back_populates="review")
+    reviewer: Mapped["User"] = relationship("User", back_populates="reviews_given", foreign_keys=[reviewer_id])
+    reviewed: Mapped["User"] = relationship("User", back_populates="reviews_received", foreign_keys=[reviewed_id])
 
     def __repr__(self) -> str:
         return f"<Review {self.rating}⭐ by {self.reviewer_id}>"

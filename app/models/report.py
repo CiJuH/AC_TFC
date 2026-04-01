@@ -26,7 +26,8 @@ class Report(UUIDMixin, TimestampMixin, Base):
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
-    reporter = relationship("User", back_populates="reports_made", foreign_keys=[reporter_id])
+    reporter: Mapped["User"] = relationship("User", back_populates="reports_made", foreign_keys=[reporter_id])
+    reported: Mapped["User"] = relationship("User", back_populates="reports_received", foreign_keys=[reported_id])
 
     def __repr__(self) -> str:
         return f"<Report {self.reason} by={self.reporter_id} resolved={self.is_resolved}>"
