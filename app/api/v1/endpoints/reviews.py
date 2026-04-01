@@ -1,6 +1,6 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.api.v1.dependencies import get_current_user
@@ -43,6 +43,17 @@ async def create_review(
         comment=body.comment,
     )
     db.add(review)
+    await db.flush()  # persist review so it's included in the avg query
+
+    # Recalculate host rating
+    avg_result = await db.execute(
+        select(func.avg(Review.rating)).where(Review.reviewed_id == body.reviewed_id)
+    )
+    host = await db.get(User, body.reviewed_id)
+    if host:
+        avg = avg_result.scalar()
+        host.rating = float(avg) if avg is not None else 0.0
+
     await db.commit()
     await db.refresh(review)
     return review

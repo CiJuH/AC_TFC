@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
-from app.api.v1.dependencies import require_admin, require_mod
+from app.api.v1.dependencies import require_mod
+from app.api.v1.helpers import check_auto_ban
 from app.models.user import User
 from app.models.ban import Ban
-from app.models.strike import Strike
+from app.models.strike import Strike, StrikeReason
 from app.schemas.ban import BanCreate, BanResponse
 from app.schemas.strike import StrikeResponse
 
@@ -89,11 +90,10 @@ async def get_user_ban(
 @router.post("/strikes", response_model=StrikeResponse, status_code=status.HTTP_201_CREATED)
 async def add_strike(
     user_id: uuid.UUID,
-    reason: str,
+    reason: StrikeReason,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_mod),
 ):
-    from app.models.strike import StrikeReason
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -102,6 +102,7 @@ async def add_strike(
     db.add(strike)
     await db.commit()
     await db.refresh(strike)
+    await check_auto_ban(db, user_id)
     return strike
 
 

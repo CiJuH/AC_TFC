@@ -4,10 +4,12 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.api.v1.dependencies import get_current_user
+from app.api.v1.helpers import check_auto_ban
 from app.models.user import User
 from app.models.island import Island
 from app.models.queue import Queue, QueueStatus
 from app.models.queue_users import QueueUser, QueueUserStatus
+from app.models.strike import Strike, StrikeReason
 from app.schemas.queue_user import QueueUserResponse
 
 router = APIRouter(tags=["queue users"])
@@ -115,7 +117,15 @@ async def update_participant_status(
     if not entry:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found")
 
-    entry.status = new_status
-    await db.commit()
+    # Skip flow: second skip → kick + strike
+    if new_status == QueueUserStatus.skipped and entry.status == QueueUserStatus.skipped:
+        entry.status = QueueUserStatus.kicked
+        db.add(Strike(user_id=user_id, reason=StrikeReason.no_confirmation))
+        await db.commit()
+        await check_auto_ban(db, user_id)
+    else:
+        entry.status = new_status
+        await db.commit()
+
     await db.refresh(entry)
     return entry
