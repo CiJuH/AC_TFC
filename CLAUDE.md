@@ -1,0 +1,205 @@
+# ACExchanger — Contexto del proyecto
+
+## Qué es
+ACExchanger es una app Android para jugadores de Animal Crossing: New Horizons (TFC).
+Permite visitar islas de otros jugadores o recibir visitas. Los hosts abren su isla con
+un código Dodo y gestionan una cola de visitantes. Usos principales: vender nabos,
+intercambiar objetos, visitar islas con catálogos especiales.
+
+## Stack
+- **Android**: Jetpack Compose (Kotlin) — maqueta completa
+- **Backend**: FastAPI + SQLAlchemy async + PostgreSQL — en construcción
+- **Migraciones**: Alembic
+- **Auth**: Discord OAuth, Google OAuth, email/password + JWT
+
+## Repos
+- Android: `ACExchanger_Android` (maqueta completa)
+- Backend: `TFC` (en construcción, rama `main`)
+
+## Estado actual del backend
+- Modelos SQLAlchemy: ✅ finalizados
+- Migraciones Alembic: ✅ migración inicial aplicada (14 tablas)
+- Siguiente paso: schemas Pydantic + endpoints
+
+## Modelo de datos (dbml)
+```
+Table User {
+  id uuid
+  oauth_provider (discord/google/email, nullable)
+  oauth_id (nullable)
+  password_hash (nullable, solo si email)
+  username str
+  avatar_url str (nullable)
+  rating float
+  is_active bool
+  is_deleted bool
+  deleted_at datetime (nullable)
+  role (admin/visitor)
+  created_at, updated_at
+}
+
+Table Island {
+  id uuid
+  user_id uuid FK
+  island_name str
+  host_name str
+  hemisphere (north/south)
+  fruit (apple/pear/cherry/peach/orange)
+  description text (nullable)
+  deleted_at datetime (nullable)
+  created_at, updated_at
+}
+
+Table Chat {
+  id uuid
+  user_a_id uuid FK
+  user_b_id uuid FK
+  last_message_at datetime (nullable)
+  created_at datetime
+  UniqueConstraint(user_a_id, user_b_id)
+}
+
+Table Queue {
+  id uuid
+  island_id uuid FK
+  -- Event info
+  category (turnips/objects)
+  turnip_price int (nullable, solo si category = turnips)
+  description text (nullable)
+  dodo_code str (5 chars)
+  -- Queue settings
+  status (active/paused/closed)
+  limit int (default 10)
+  requires_fee bool
+  fee_description str (nullable)
+  -- Timestamps
+  visit_ends_at datetime (nullable, hora estimada de cierre)
+  created_at datetime
+  closed_at datetime (nullable, None = abierta)
+}
+
+Table QueueUser {
+  id uuid
+  queue_id uuid FK
+  user_id uuid FK
+  status (waiting/visiting/done/skipped/left)
+  created_at, updated_at
+  -- posición calculada por created_at, no almacenada
+  UniqueConstraint(queue_id, user_id)
+}
+
+Table Visit {
+  id uuid
+  queue_id uuid FK
+  island_id uuid FK
+  user_id uuid FK
+  entered_at datetime (nullable)
+  left_at datetime (nullable, None = sigue en isla)
+  created_at datetime
+}
+
+Table Review {
+  id uuid
+  visit_id uuid FK (unique)
+  reviewer_id uuid FK
+  reviewed_id uuid FK
+  rating int (1-5, CheckConstraint)
+  comment text (nullable)
+  created_at, updated_at
+}
+
+Table Ban {
+  id uuid
+  user_id uuid FK (unique)
+  banned_by_id uuid FK (nullable)
+  reason text
+  ban_from datetime
+  is_active bool
+  expires_at datetime (nullable, None = permanente)
+  created_at, updated_at
+}
+
+Table Strike {
+  id uuid
+  user_id uuid FK
+  reason (no_confirmation/kicked_by_host)
+  created_at datetime
+  -- 3 strikes en 7 días = ban automático de 24h
+  -- strike por no_confirmation solo se aplica a partir del 2º skip en la misma cola
+}
+
+Table Friendship {
+  id uuid
+  user_id uuid FK
+  friend_id uuid FK
+  status (pending/accepted/blocked)
+  created_at, updated_at
+  UniqueConstraint(user_id, friend_id)
+}
+
+Table PrivateMessage {
+  id uuid
+  chat_id uuid FK
+  sender_id uuid FK
+  content text
+  is_read bool
+  is_deleted bool
+  created_at datetime
+}
+
+Table QueueMessage {
+  id uuid
+  queue_id uuid FK
+  sender_id uuid FK
+  content text
+  is_pinned bool
+  is_deleted bool
+  deleted_by uuid FK (nullable)
+  created_at datetime
+}
+```
+
+## Relaciones
+- User 1--* Island
+- User 1--1 Ban
+- User 1--* Strike
+- User 1--* Friendship (como user_id y como friend_id)
+- User 1--* Chat (como user_a o user_b, viewonly)
+- User 1--* PrivateMessage (como sender)
+- Island 1--* Queue
+- Queue 1--* QueueUser
+- Queue 1--* QueueMessage
+- Queue 1--* Visit
+- User 1--* Visit
+- Visit 1--1 Review
+
+## Decisiones de diseño relevantes
+- `is_host` no se almacena ni se deriva en User — se calcula en el servicio con una query eficiente
+- `dodo_code` vive como columna en Queue, en claro — los códigos son temporales y no tienen valor fuera de contexto
+- `turnip_price`, `category` y `description` viven en Queue, no en Island — cada cola es un evento con su propio contexto; Island solo guarda la info permanente de la isla
+- `position` en QueueUser no se almacena — se calcula por `created_at`
+- `expires_at = None` en Ban implica ban permanente — no hay campo `is_permanent`
+- `deleted_at = None` en Island implica isla activa — no hay campo `is_active`
+- Las reviews son sobre el usuario (host), no sobre la isla — la visita es el "ticket" que habilita la review
+- Chat existe como entidad propia para guardar `last_message_at` y ordenar conversaciones eficientemente
+
+## Mixins disponibles (mixins.py)
+- `UUIDMixin` — añade `id` (UUID primary key)
+- `CreatedAtMixin` — añade solo `created_at`
+- `TimestampMixin` — añade `created_at` + `updated_at`
+
+## Convenciones de código
+- Modelos con UUIDMixin + el mixin de timestamps apropiado según el modelo
+- Columnas: `Mapped[tipo]` con `mapped_column(...)`
+- Relationships tipados: `Mapped["Modelo"]` o `Mapped["Modelo | None"]`
+- `__repr__` en todos los modelos
+- SQLAlchemy async con AsyncSession
+- Commits en inglés con Conventional Commits (feat/fix/refactor/chore/docs)
+- Comentarios en el código en inglés
+
+## Convenciones de la app Android
+- Todo el texto visible en español, código en inglés
+- "bells" → siempre "bayas"
+- NativeFruit y Hemisphere están en ui/profile/ProfileModels.kt
+- clickableWithFeedback para elementos clickables
+- DEBUG_HAS_ISLAND y DEBUG_IS_IN_ISLAND en HomeModels.kt para simular estados
