@@ -20,13 +20,20 @@ intercambiar objetos, visitar islas con catálogos especiales.
 - Modelos SQLAlchemy: ✅ finalizados
 - Schemas Pydantic: ✅ finalizados (`app/schemas/`)
 - Migraciones Alembic: ✅ migración inicial limpia (`589de32e1e4c`)
-- Endpoints implementados:
-  - `auth`: register, login, refresh, Discord OAuth, Google OAuth ✅
-  - `users`: GET/PATCH/DELETE /me, GET /{id} ✅
-  - `islands`: CRUD isla propia, GET /{id} ✅
-  - `queues`: crear, listar, GET/PATCH /{id}, cerrar, GET /my ✅
-  - `queue_users`: join, leave, list participants, update status ✅
-- Siguiente paso: visits + reviews
+- Endpoints implementados: ✅ todos
+  - `auth`: register, login, refresh, Discord OAuth, Google OAuth
+  - `users`: GET/PATCH/DELETE /me, GET /{id}
+  - `islands`: CRUD isla propia, GET /{id}
+  - `queues`: crear, listar, GET/PATCH /{id}, cerrar, GET /my
+  - `queue_users`: join, leave, list participants, update status
+  - `visits`: start (host), end (host o visitor), GET /{id}
+  - `reviews`: crear, GET /{id}, GET /visit/{id}
+  - `queue_messages`: list, send, pin, delete
+  - `chats`: list, get_or_create, messages (list/send/mark_read)
+  - `friendships`: list, send request, update status, delete
+  - `reports`: create, list (mod), resolve (mod)
+  - `admin`: bans (create/lift/get), strikes (create/list)
+- Siguiente paso: tests manuales (ver lista en docs/tests.md)
 
 ## Modelo de datos (dbml)
 ```
