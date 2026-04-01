@@ -51,7 +51,7 @@ class Queue(UUIDMixin, CreatedAtMixin, Base):
 
     @property
     def is_active(self) -> bool:
-        return self.status == QueueStatus.open
+        return self.status == QueueStatus.active
 
     # Relationships
     island: Mapped["Island"] = relationship("Island", back_populates="queues")
