@@ -10,7 +10,7 @@ from app.models.island import Island
 from app.models.queue import Queue, QueueStatus
 from app.models.queue_users import QueueUser, QueueUserStatus
 from app.models.strike import Strike, StrikeReason
-from app.schemas.queue_user import QueueUserResponse
+from app.schemas.queue_user import QueueUserResponse, ActiveQueueStatusResponse
 
 router = APIRouter(tags=["queue users"])
 
@@ -157,3 +157,77 @@ async def update_participant_status(
 
     await db.refresh(entry)
     return entry
+
+
+@router.get("/queue-users/me/active", response_model=ActiveQueueStatusResponse)
+async def get_my_active_queue_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Returns the queue the current user is currently waiting in or visiting."""
+    result = await db.execute(
+        select(QueueUser).where(
+            QueueUser.user_id == current_user.id,
+            QueueUser.status.in_([
+                QueueUserStatus.waiting,
+                QueueUserStatus.visiting,
+                QueueUserStatus.skipped,
+            ]),
+        )
+    )
+    queue_user = result.scalar_one_or_none()
+    if not queue_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not in any active queue")
+
+    queue = await db.get(Queue, queue_user.queue_id)
+    island = await db.get(Island, queue.island_id)
+
+    # Count total waiting + visiting
+    total = (await db.execute(
+        select(func.count()).where(
+            QueueUser.queue_id == queue.id,
+            QueueUser.status.in_([QueueUserStatus.waiting, QueueUserStatus.visiting]),
+        )
+    )).scalar()
+
+    # Position: skipped first, then waiting by created_at. None if already visiting.
+    position = None
+    if queue_user.status != QueueUserStatus.visiting:
+        skipped_ahead = (await db.execute(
+            select(func.count()).where(
+                QueueUser.queue_id == queue.id,
+                QueueUser.status == QueueUserStatus.skipped,
+                QueueUser.id != queue_user.id,
+            )
+        )).scalar()
+
+        if queue_user.status == QueueUserStatus.skipped:
+            before_me = (await db.execute(
+                select(func.count()).where(
+                    QueueUser.queue_id == queue.id,
+                    QueueUser.status == QueueUserStatus.skipped,
+                    QueueUser.created_at < queue_user.created_at,
+                )
+            )).scalar()
+            position = before_me + 1
+        else:
+            waiting_before_me = (await db.execute(
+                select(func.count()).where(
+                    QueueUser.queue_id == queue.id,
+                    QueueUser.status == QueueUserStatus.waiting,
+                    QueueUser.created_at < queue_user.created_at,
+                )
+            )).scalar()
+            position = skipped_ahead + waiting_before_me + 1
+
+    return ActiveQueueStatusResponse(
+        queue_user_id=queue_user.id,
+        queue_id=queue.id,
+        island_id=island.id,
+        island_name=island.island_name,
+        status=queue_user.status,
+        position=position,
+        total=total,
+        category=queue.category.value,
+        turnip_price=queue.turnip_price,
+    )
