@@ -4,10 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from passlib.context import CryptContext
+from app.api.v1.dependencies import get_current_user
 from app.db.session import get_db
 from app.core.config import settings
 from app.core.security import create_access_token, create_refresh_token, decode_token
 from app.models.user import User, OAuthProvider
+from app.schemas.auth import RegisterRequest, LoginRequest, RefreshRequest, LogoutRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -23,20 +25,6 @@ GOOGLE_USER_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 
 # --- Email / password ---
-
-class RegisterRequest(BaseModel):
-    username: str
-    password: str
-
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
@@ -218,3 +206,32 @@ async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
         "refresh_token": create_refresh_token(str(user.id)),
         "token_type": "bearer",
     }
+
+# --- Logout ---
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    body: LogoutRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Stateless logout — validates the access token (via get_current_user)
+    and returns 204. The client must discard both tokens locally.
+    The refresh token is accepted in the body for forward-compatibility
+    (e.g. if a token blacklist is added later).
+    """
+    import uuid
+    payload = decode_token(body.refresh_token)
+    if not payload or payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+    # Ensure the refresh token belongs to the authenticated user
+    if str(current_user.id) != payload.get("sub"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Token does not belong to current user",
+        )
+    # Stateless: nothing to delete. Client discards tokens.
+    return
