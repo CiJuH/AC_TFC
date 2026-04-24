@@ -4,6 +4,18 @@ from pydantic import BaseModel, ConfigDict
 from app.models.island import Hemisphere, Fruit
 
 
+class IslandPublic(BaseModel):
+    """Island info shown on a user's public profile."""
+    id: uuid.UUID
+    island_name: str
+    host_name: str
+    hemisphere: Hemisphere
+    fruit: Fruit
+    description: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class IslandCreate(BaseModel):
     island_name: str
     host_name: str

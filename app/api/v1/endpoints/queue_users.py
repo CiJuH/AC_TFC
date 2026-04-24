@@ -96,6 +96,34 @@ async def leave_queue(
     await db.commit()
 
 
+@router.post("/queues/{queue_id}/rejoin", response_model=QueueUserResponse)
+async def rejoin_queue(
+    queue_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Visitor confirms second chance after being skipped, moving back to waiting."""
+    queue = await _get_queue_or_404(db, queue_id)
+    if queue.status != QueueStatus.active:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Queue is not active")
+
+    result = await db.execute(
+        select(QueueUser).where(
+            QueueUser.queue_id == queue_id,
+            QueueUser.user_id == current_user.id,
+            QueueUser.status == QueueUserStatus.skipped,
+        )
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No pending second chance in this queue")
+
+    entry.status = QueueUserStatus.waiting
+    await db.commit()
+    await db.refresh(entry)
+    return entry
+
+
 @router.patch("/queues/{queue_id}/participants/{user_id}", response_model=QueueUserResponse)
 async def update_participant_status(
     queue_id: uuid.UUID,

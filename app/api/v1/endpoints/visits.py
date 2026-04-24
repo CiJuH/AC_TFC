@@ -15,6 +15,29 @@ from app.schemas.visit import VisitResponse
 router = APIRouter(prefix="/visits", tags=["visits"])
 
 
+@router.get("/me", response_model=list[VisitResponse])
+async def get_my_visits(
+    as_host: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Returns visits made as a visitor (default) or received on your island (as_host=true)."""
+    if as_host:
+        result = await db.execute(
+            select(Visit)
+            .join(Island, Visit.island_id == Island.id)
+            .where(Island.user_id == current_user.id)
+            .order_by(Visit.created_at.desc())
+        )
+    else:
+        result = await db.execute(
+            select(Visit)
+            .where(Visit.user_id == current_user.id)
+            .order_by(Visit.created_at.desc())
+        )
+    return result.scalars().all()
+
+
 @router.post("", response_model=VisitResponse, status_code=status.HTTP_201_CREATED)
 async def start_visit(
     queue_id: uuid.UUID,

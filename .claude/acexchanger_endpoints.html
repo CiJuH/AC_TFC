@@ -1,0 +1,267 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); }
+
+.container { padding: 1rem 0; }
+
+.filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.filter-btn {
+  font-family: var(--font-sans); font-size: 12px; font-weight: 500;
+  padding: 5px 12px; border-radius: 99px; cursor: pointer;
+  border: 0.5px solid var(--color-border-secondary);
+  background: var(--color-background-primary);
+  color: var(--color-text-secondary);
+  transition: all 0.15s;
+}
+.filter-btn:hover { background: var(--color-background-secondary); }
+.filter-btn.active {
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-primary);
+}
+
+.search-wrap { margin-bottom: 1rem; }
+.search-wrap input {
+  width: 100%; font-family: var(--font-sans); font-size: 13px;
+  padding: 7px 12px; border-radius: var(--border-radius-md);
+}
+
+.stats { display: flex; gap: 12px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.stat-card {
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-md);
+  padding: 10px 14px; flex: 1; min-width: 90px;
+}
+.stat-card .val { font-size: 22px; font-weight: 500; color: var(--color-text-primary); }
+.stat-card .lbl { font-size: 12px; color: var(--color-text-secondary); margin-top: 2px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th {
+  text-align: left; font-size: 11px; font-weight: 500; letter-spacing: 0.04em;
+  color: var(--color-text-secondary); border-bottom: 0.5px solid var(--color-border-tertiary);
+  padding: 6px 8px; text-transform: uppercase; cursor: pointer; user-select: none;
+}
+thead th:hover { color: var(--color-text-primary); }
+tbody tr { border-bottom: 0.5px solid var(--color-border-tertiary); transition: background 0.1s; }
+tbody tr:hover { background: var(--color-background-secondary); }
+td { padding: 9px 8px; vertical-align: top; }
+
+.method {
+  display: inline-block; font-size: 10px; font-weight: 500; letter-spacing: 0.03em;
+  padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+}
+.GET    { background: #E6F1FB; color: #0C447C; }
+.POST   { background: #EAF3DE; color: #27500A; }
+.PATCH  { background: #FAEEDA; color: #633806; }
+.DELETE { background: #FCEBEB; color: #791F1F; }
+
+.badge {
+  display: inline-block; font-size: 10px; font-weight: 500;
+  padding: 2px 7px; border-radius: 99px; white-space: nowrap;
+}
+.p1 { background: #FCEBEB; color: #A32D2D; }
+.p2 { background: #FAEEDA; color: #854F0B; }
+.p3 { background: #E6F1FB; color: #185FA5; }
+.p4 { background: #F1EFE8; color: #5F5E5A; }
+
+.tag {
+  display: inline-block; font-size: 10px; padding: 1px 6px;
+  border-radius: 4px; background: var(--color-background-secondary);
+  color: var(--color-text-secondary); border: 0.5px solid var(--color-border-tertiary);
+  white-space: nowrap;
+}
+
+.path { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-primary); }
+.desc { font-size: 12px; color: var(--color-text-secondary); margin-top: 3px; }
+.new-badge {
+  display: inline-block; font-size: 9px; font-weight: 500; letter-spacing: 0.04em;
+  padding: 1px 5px; border-radius: 3px; background: #9FE1CB; color: #085041;
+  margin-left: 4px; vertical-align: middle; text-transform: uppercase;
+}
+.count-row { font-size: 12px; color: var(--color-text-secondary); margin-top: 1rem; }
+</style>
+
+<div class="container">
+<h2 class="sr-only">Lista completa de endpoints de ACExchanger con prioridad y módulo</h2>
+
+<div class="search-wrap">
+  <input type="text" id="search" placeholder="Buscar endpoint o ruta..." oninput="render()">
+</div>
+
+<div class="filters" id="filters"></div>
+
+<div class="stats" id="stats"></div>
+
+<table>
+  <thead>
+    <tr>
+      <th onclick="sortBy('method')" style="width:58px">Método</th>
+      <th onclick="sortBy('path')" style="width:220px">Ruta</th>
+      <th onclick="sortBy('module')">Módulo</th>
+      <th onclick="sortBy('priority')">Prioridad</th>
+      <th>Motivo</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+<p class="count-row" id="count"></p>
+</div>
+
+<script>
+const ALL = [
+  {method:"POST",path:"/auth/register",module:"auth",priority:1,existing:true,desc:"Registro con email/password",reason:"Entrada a la app"},
+  {method:"POST",path:"/auth/login",module:"auth",priority:1,existing:true,desc:"Login email/password → JWT",reason:"Entrada a la app"},
+  {method:"POST",path:"/auth/refresh",module:"auth",priority:1,existing:true,desc:"Renueva el access token",reason:"Sesión continua"},
+  {method:"POST",path:"/auth/discord",module:"auth",priority:1,existing:true,desc:"OAuth Discord → JWT",reason:"Login social principal de la comunidad AC"},
+  {method:"POST",path:"/auth/google",module:"auth",priority:1,existing:true,desc:"OAuth Google → JWT",reason:"Login social alternativo"},
+  {method:"POST",path:"/auth/logout",module:"auth",priority:2,existing:false,desc:"Invalida el refresh token",reason:"Seguridad: sin esto el token queda activo aunque el usuario cierre sesión"},
+
+  {method:"GET",path:"/users/me",module:"users",priority:1,existing:true,desc:"Perfil propio",reason:"Base de toda la app"},
+  {method:"PATCH",path:"/users/me",module:"users",priority:1,existing:true,desc:"Edita perfil propio",reason:"Nombre, descripción, etc."},
+  {method:"DELETE",path:"/users/me",module:"users",priority:3,existing:true,desc:"Baja de cuenta",reason:"RGPD / App Store requerimiento"},
+  {method:"GET",path:"/users/:id",module:"users",priority:1,existing:true,desc:"Perfil público de otro usuario",reason:"Ver host/visitante"},
+  {method:"GET",path:"/users/:id/stats",module:"users",priority:2,existing:false,desc:"Estadísticas del usuario",reason:"Pantalla perfil ajeno: visitas, rating, isla — evita 3 llamadas"},
+  {method:"POST",path:"/users/me/avatar",module:"users",priority:2,existing:false,desc:"Sube avatar (multipart)",reason:"Pendiente en Android; el perfil queda con iniciales si no existe"},
+  {method:"DELETE",path:"/users/me/avatar",module:"users",priority:3,existing:false,desc:"Elimina avatar",reason:"Restaurar a iniciales"},
+
+  {method:"GET",path:"/islands",module:"islands",priority:1,existing:true,desc:"Lista islas (con filtros)",reason:"Pantalla exploración"},
+  {method:"POST",path:"/islands",module:"islands",priority:1,existing:true,desc:"Crea isla propia",reason:"Flujo principal del host"},
+  {method:"GET",path:"/islands/me",module:"islands",priority:1,existing:true,desc:"Isla del usuario actual",reason:"Home card de isla"},
+  {method:"GET",path:"/islands/:id",module:"islands",priority:1,existing:true,desc:"Detalle de isla",reason:"Island detail screen"},
+  {method:"PATCH",path:"/islands/:id",module:"islands",priority:1,existing:true,desc:"Edita isla propia",reason:"Nombre, fruta, descripción"},
+  {method:"DELETE",path:"/islands/:id",module:"islands",priority:2,existing:true,desc:"Elimina isla (soft delete)",reason:"Baja de isla"},
+  {method:"GET",path:"/islands/:id/active-queue",module:"islands",priority:1,existing:false,desc:"Cola activa de una isla",reason:"Crítico: flujo de visita empieza aquí — sin esto hay que listar todas las colas y filtrar en cliente"},
+
+  {method:"GET",path:"/queues/explore",module:"queues",priority:1,existing:false,desc:"Exploración con filtros avanzados",reason:"Corazón de la app — sin descubrimiento no hay visitas"},
+  {method:"GET",path:"/queues/turnip-prices",module:"queues",priority:2,existing:false,desc:"Ranking de precios de nabos activos",reason:"Feature diferencial de la comunidad AC — coloca ACExchanger en su contexto"},
+  {method:"POST",path:"/queues",module:"queues",priority:1,existing:true,desc:"Crea una cola",reason:"Acción principal del host"},
+  {method:"GET",path:"/queues/my",module:"queues",priority:1,existing:true,desc:"Cola activa del host actual",reason:"Host dashboard"},
+  {method:"GET",path:"/queues/:id",module:"queues",priority:1,existing:true,desc:"Detalle de cola",reason:"Vista visitante y host"},
+  {method:"PATCH",path:"/queues/:id",module:"queues",priority:1,existing:true,desc:"Edita cola (Dodo, precio, status)",reason:"Host necesita pausar/editar"},
+  {method:"POST",path:"/queues/:id/close",module:"queues",priority:1,existing:true,desc:"Cierra la cola",reason:"Fin del evento del host"},
+  {method:"GET",path:"/queues/:id/my-position",module:"queues",priority:1,existing:false,desc:"Posición actual del visitante en cola",reason:"UX crítica: el visitante necesita saber su turno sin polling a la lista completa"},
+
+  {method:"POST",path:"/queues/:id/join",module:"queue_users",priority:1,existing:true,desc:"Unirse a la cola",reason:"Acción principal del visitante"},
+  {method:"DELETE",path:"/queues/:id/leave",module:"queue_users",priority:1,existing:true,desc:"Abandonar la cola",reason:"Salida voluntaria"},
+  {method:"GET",path:"/queues/:id/participants",module:"queue_users",priority:1,existing:true,desc:"Lista de participantes",reason:"Host ve quién espera; visitante ve su posición"},
+  {method:"PATCH",path:"/queue-users/:id/status",module:"queue_users",priority:1,existing:true,desc:"Cambia status (visiting/skipped/kicked/done)",reason:"Gestión del host y lógica de skips"},
+  {method:"POST",path:"/queues/:id/rejoin",module:"queue_users",priority:2,existing:false,desc:"Confirmar segunda oportunidad tras skip",reason:"Semánticamente más claro que PATCH — el visitante confirma que sigue queriendo entrar"},
+
+  {method:"POST",path:"/visits",module:"visits",priority:1,existing:true,desc:"Inicia visita (host)",reason:"Evento de entrada a la isla"},
+  {method:"PATCH",path:"/visits/:id/end",module:"visits",priority:1,existing:true,desc:"Termina visita (host o visitante)",reason:"Cierre del evento"},
+  {method:"GET",path:"/visits/:id",module:"visits",priority:1,existing:true,desc:"Detalle de visita",reason:"Historial y review"},
+  {method:"GET",path:"/visits/me",module:"visits",priority:1,existing:false,desc:"Visitas del usuario (realizadas y recibidas)",reason:"Pantalla 'Visitas' en Android — tabs mis visitas / recibidas"},
+
+  {method:"POST",path:"/reviews",module:"reviews",priority:1,existing:true,desc:"Crea review tras visita",reason:"Core de reputación del sistema"},
+  {method:"GET",path:"/reviews/:id",module:"reviews",priority:2,existing:true,desc:"Detalle de review",reason:"Transparencia"},
+  {method:"GET",path:"/reviews/visit/:id",module:"reviews",priority:2,existing:true,desc:"Review de una visita concreta",reason:"Pantalla detalle de visita"},
+  {method:"GET",path:"/reviews/user/:id",module:"reviews",priority:2,existing:false,desc:"Reviews recibidas por un usuario",reason:"Perfil ajeno — ver historial de valoraciones del host"},
+
+  {method:"GET",path:"/queue-messages/:queueId",module:"queue_messages",priority:2,existing:true,desc:"Lista mensajes de la cola",reason:"Chat público de la sala de espera"},
+  {method:"POST",path:"/queue-messages",module:"queue_messages",priority:2,existing:true,desc:"Envía mensaje a la cola",reason:"Comunicación host-visitantes"},
+  {method:"PATCH",path:"/queue-messages/:id/pin",module:"queue_messages",priority:3,existing:true,desc:"Pin/unpin de mensaje",reason:"Host resalta instrucciones"},
+  {method:"DELETE",path:"/queue-messages/:id",module:"queue_messages",priority:3,existing:true,desc:"Elimina mensaje",reason:"Moderación del host"},
+
+  {method:"GET",path:"/chats",module:"chats",priority:2,existing:true,desc:"Lista de chats del usuario",reason:"Pantalla Mensajes"},
+  {method:"POST",path:"/chats",module:"chats",priority:2,existing:true,desc:"Obtiene o crea chat con otro usuario",reason:"Abrir conversación desde perfil"},
+  {method:"GET",path:"/chats/:id/messages",module:"chats",priority:2,existing:true,desc:"Mensajes de un chat",reason:"Vista de conversación"},
+  {method:"POST",path:"/chats/:id/messages",module:"chats",priority:2,existing:true,desc:"Envía mensaje privado",reason:"Chat 1:1"},
+  {method:"POST",path:"/chats/:id/read",module:"chats",priority:2,existing:true,desc:"Marca mensajes como leídos",reason:"Badge de no leídos"},
+
+  {method:"GET",path:"/friendships",module:"friendships",priority:2,existing:true,desc:"Lista de amigos y solicitudes",reason:"Sistema social"},
+  {method:"POST",path:"/friendships",module:"friendships",priority:2,existing:true,desc:"Envía solicitud de amistad",reason:"Añadir amigo desde perfil ajeno"},
+  {method:"PATCH",path:"/friendships/:id",module:"friendships",priority:2,existing:true,desc:"Acepta/rechaza/bloquea solicitud",reason:"Gestión de solicitudes"},
+  {method:"DELETE",path:"/friendships/:id",module:"friendships",priority:3,existing:true,desc:"Elimina amistad",reason:"Limpieza de lista"},
+
+  {method:"POST",path:"/reports",module:"reports",priority:2,existing:true,desc:"Reporta a un usuario",reason:"Pantalla perfil ajeno (pendiente Android)"},
+  {method:"GET",path:"/reports",module:"reports",priority:2,existing:true,desc:"Lista reportes (mod)",reason:"Panel de moderación"},
+  {method:"PATCH",path:"/reports/:id/resolve",module:"reports",priority:2,existing:true,desc:"Resuelve reporte (mod)",reason:"Cierre del caso"},
+
+  {method:"POST",path:"/admin/bans",module:"admin",priority:2,existing:true,desc:"Crea ban (manual o automático)",reason:"Aplicar sanción"},
+  {method:"DELETE",path:"/admin/bans/:userId",module:"admin",priority:2,existing:true,desc:"Levanta ban",reason:"Fin de sanción"},
+  {method:"GET",path:"/admin/bans/:userId",module:"admin",priority:2,existing:true,desc:"Estado de ban de un usuario",reason:"Consulta de estado"},
+  {method:"POST",path:"/admin/strikes",module:"admin",priority:2,existing:true,desc:"Crea strike",reason:"Sanción menor (no_confirmation, kicked_by_host)"},
+  {method:"GET",path:"/admin/strikes/:userId",module:"admin",priority:2,existing:true,desc:"Strikes de un usuario",reason:"Historial de comportamiento"},
+  {method:"GET",path:"/admin/users/search",module:"admin",priority:3,existing:false,desc:"Busca usuarios por username",reason:"Mods necesitan localizar usuarios para actuar"},
+  {method:"GET",path:"/admin/users/:id/history",module:"admin",priority:3,existing:false,desc:"Historial de bans y strikes",reason:"Contexto completo antes de sancionar"},
+
+  {method:"GET",path:"/notifications",module:"notifications",priority:2,existing:false,desc:"Lista de notificaciones del usuario",reason:"Fallback de polling mientras FCM no está listo en Android"},
+  {method:"POST",path:"/notifications/read",module:"notifications",priority:3,existing:false,desc:"Marca notificaciones como leídas",reason:"Badge de la campana"},
+  {method:"POST",path:"/notifications/fcm-token",module:"notifications",priority:2,existing:false,desc:"Registra token FCM del dispositivo",reason:"Necesario para push notifications cuando se implemente FCM"},
+];
+
+const MODULES = ["todos",...[...new Set(ALL.map(e=>e.module))]];
+const PRIO_LABEL = {1:"Crítico",2:"Alta",3:"Media",4:"Baja"};
+const PRIO_CLASS = {1:"p1",2:"p2",3:"p3",4:"p4"};
+
+let activeModule = "todos";
+let searchVal = "";
+let sortKey = "priority";
+let sortDir = 1;
+
+function sortBy(k) {
+  if(sortKey===k) sortDir*=-1; else { sortKey=k; sortDir=1; }
+  render();
+}
+
+function render() {
+  searchVal = document.getElementById("search").value.toLowerCase();
+
+  const filtered = ALL.filter(e => {
+    const modMatch = activeModule==="todos" || e.module===activeModule;
+    const q = searchVal;
+    const textMatch = !q || e.path.toLowerCase().includes(q) || e.desc.toLowerCase().includes(q) || e.reason.toLowerCase().includes(q) || e.method.toLowerCase().includes(q);
+    return modMatch && textMatch;
+  });
+
+  filtered.sort((a,b)=>{
+    let av=a[sortKey], bv=b[sortKey];
+    if(typeof av==="string") av=av.toLowerCase(), bv=bv.toLowerCase();
+    return av<bv?-sortDir:av>bv?sortDir:0;
+  });
+
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = filtered.map(e=>`
+    <tr>
+      <td><span class="method ${e.method}">${e.method}</span></td>
+      <td>
+        <span class="path">${e.path}</span>${!e.existing?'<span class="new-badge">nuevo</span>':''}
+        <div class="desc">${e.desc}</div>
+      </td>
+      <td><span class="tag">${e.module}</span></td>
+      <td><span class="badge ${PRIO_CLASS[e.priority]}">${PRIO_LABEL[e.priority]}</span></td>
+      <td style="font-size:12px;color:var(--color-text-secondary)">${e.reason}</td>
+    </tr>
+  `).join("");
+
+  const newCount = filtered.filter(e=>!e.existing).length;
+  document.getElementById("count").textContent = `${filtered.length} endpoints mostrados · ${newCount} nuevos sugeridos`;
+
+  const total = ALL.length;
+  const newTotal = ALL.filter(e=>!e.existing).length;
+  const crit = ALL.filter(e=>e.priority===1).length;
+  document.getElementById("stats").innerHTML = `
+    <div class="stat-card"><div class="val">${total}</div><div class="lbl">Total endpoints</div></div>
+    <div class="stat-card"><div class="val">${newTotal}</div><div class="lbl">Nuevos sugeridos</div></div>
+    <div class="stat-card"><div class="val">${crit}</div><div class="lbl">Prioridad crítica</div></div>
+    <div class="stat-card"><div class="val">${total-newTotal}</div><div class="lbl">Ya implementados</div></div>
+  `;
+}
+
+function buildFilters() {
+  const container = document.getElementById("filters");
+  container.innerHTML = MODULES.map(m=>`
+    <button class="filter-btn${m===activeModule?' active':''}" onclick="setModule('${m}')">${m}</button>
+  `).join("");
+}
+
+function setModule(m) {
+  activeModule=m;
+  buildFilters();
+  render();
+}
+
+buildFilters();
+render();
+</script>

@@ -21,18 +21,18 @@ intercambiar objetos, visitar islas con catálogos especiales.
 - Schemas Pydantic: ✅ finalizados (`app/schemas/`)
 - Migraciones Alembic: ✅ migración inicial limpia (`589de32e1e4c`)
 - Endpoints implementados: ✅ todos
-  - `auth`: register, login, refresh, logout, Discord OAuth, Google OAuth
-  - `users`: GET/PATCH/DELETE /me, GET /{id}, GET /{id}/stats
-  - `islands`: CRUD isla propia, GET /islands (con filtros), GET /{id}, GET /{id}/active-queue
-  - `queues`: crear, GET /my, GET /explore, GET /turnip-prices, GET/PATCH /{id}, cerrar, GET /{id}/my-position
-  - `queue_users`: join, leave, rejoin, list participants, update status
-  - `visits`: GET /me (as_host flag), start (host), end (host o visitor), GET /{id}
-  - `reviews`: crear, GET /{id}, GET /visit/{id}, GET /user/{id}
+  - `auth`: register, login, refresh, Discord OAuth, Google OAuth
+  - `users`: GET/PATCH/DELETE /me, GET /{id}
+  - `islands`: CRUD isla propia, GET /{id}
+  - `queues`: crear, listar, GET/PATCH /{id}, cerrar, GET /my
+  - `queue_users`: join, leave, list participants, update status
+  - `visits`: start (host), end (host o visitor), GET /{id}
+  - `reviews`: crear, GET /{id}, GET /visit/{id}
   - `queue_messages`: list, send, pin, delete
   - `chats`: list, get_or_create, messages (list/send/mark_read)
   - `friendships`: list, send request, update status, delete
   - `reports`: create, list (mod), resolve (mod)
-  - `admin`: bans (create/lift/get), strikes (create/list), users (search, history)
+  - `admin`: bans (create/lift/get), strikes (create/list)
 - Siguiente paso: tests manuales (ver lista en docs/tests.md)
 
 ## Modelo de datos (dbml)
@@ -199,7 +199,6 @@ Table QueueMessage {
 - `deleted_at = None` en Island implica isla activa — no hay campo `is_active`
 - Las reviews son sobre el usuario (host), no sobre la isla — la visita es el "ticket" que habilita la review
 - Chat existe como entidad propia para guardar `last_message_at` y ordenar conversaciones eficientemente
-- En FastAPI, rutas estáticas (`/explore`, `/me`) deben declararse antes de rutas dinámicas (`/{id}`) si tienen la misma profundidad de path
 
 ## Mixins disponibles (mixins.py)
 - `UUIDMixin` — añade `id` (UUID primary key)

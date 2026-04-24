@@ -40,6 +40,9 @@ Lista de casos a probar en `/docs` (Swagger). Para cada caso se indica el result
 |---|---|
 | Crear isla | 201 |
 | Crear segunda isla (misma cuenta) | 409 |
+| GET /islands (sin filtros) | 200, lista de islas activas |
+| GET /islands?fruit=apple | 200, solo islas con fruta apple |
+| GET /islands?hemisphere=north | 200, solo islas del hemisferio norte |
 | GET /islands/me con isla | 200 |
 | GET /islands/me sin isla | 404 |
 | PATCH /islands/me actualizando descripción | 200 |
@@ -47,6 +50,9 @@ Lista de casos a probar en `/docs` (Swagger). Para cada caso se indica el result
 | DELETE /islands/me con cola abierta | 204 → cola queda con status=closed |
 | GET /islands/{id} existente | 200 |
 | GET /islands/{id} eliminada | 404 |
+| GET /islands/{id}/active-queue con cola activa | 200 |
+| GET /islands/{id}/active-queue sin cola activa | 404 |
+| GET /islands/{id}/active-queue isla inexistente | 404 |
 
 ---
 
@@ -60,8 +66,16 @@ Lista de casos a probar en `/docs` (Swagger). Para cada caso se indica el result
 | Crear cola con limit=101 | 422 |
 | Crear cola sin isla previa | 404 |
 | Crear segunda cola con cola ya abierta | 409 |
+| GET /queues/explore (sin filtros) | 200, lista de colas activas |
+| GET /queues/explore?category=turnips | 200, solo colas de nabos |
+| GET /queues/explore?turnip_price_min=300 | 200, solo colas con precio ≥ 300 |
+| GET /queues/turnip-prices | 200, colas de nabos ordenadas por precio desc |
 | GET /queues/my | lista de colas de tu isla |
 | GET /queues/{id} | 200 |
+| GET /queues/{id}/my-position en cola (waiting) | 200, position >= 1 |
+| GET /queues/{id}/my-position en cola (skipped) | 200, position >= 1 |
+| GET /queues/{id}/my-position no estás en la cola | 404 |
+| GET /queues/{id}/my-position status=done | 200, position=null |
 | PATCH /queues/{id} como host | 200 |
 | PATCH /queues/{id} como no-host | 403 |
 | POST /queues/{id}/close | 200, status=closed, closed_at != null |
@@ -82,6 +96,9 @@ Lista de casos a probar en `/docs` (Swagger). Para cada caso se indica el result
 | Leave cola en la que no estás | 404 |
 | PATCH status participante como host | 200 |
 | PATCH status participante como no-host | 403 |
+| POST /queues/{id}/rejoin con status=skipped | 200, status=waiting |
+| POST /queues/{id}/rejoin sin status=skipped | 404 |
+| POST /queues/{id}/rejoin en cola pausada | 409 |
 
 ---
 
@@ -89,6 +106,9 @@ Lista de casos a probar en `/docs` (Swagger). Para cada caso se indica el result
 
 | Test | Resultado esperado |
 |---|---|
+| GET /visits/me (como visitante) | 200, lista de mis visitas |
+| GET /visits/me?as_host=true | 200, visitas recibidas en mi isla |
+| GET /visits/me?as_host=true sin isla | 200, lista vacía |
 | POST /visits (host) con visitante en cola | 201, QueueUser pasa a visiting |
 | POST /visits como no-host | 403 |
 | POST /visits con user no en cola | 404 |
@@ -111,6 +131,8 @@ Lista de casos a probar en `/docs` (Swagger). Para cada caso se indica el result
 | POST /reviews con rating=6 | 422 |
 | GET /reviews/visit/{id} con review | 200 |
 | GET /reviews/visit/{id} sin review | 404 |
+| GET /reviews/user/{id} con reviews | 200, lista ordenada por fecha |
+| GET /reviews/user/{id} sin reviews | 200, lista vacía |
 
 ---
 
@@ -189,3 +211,7 @@ Lista de casos a probar en `/docs` (Swagger). Para cada caso se indica el result
 | GET /admin/users/{id}/ban sin ban | 404 |
 | POST /admin/strikes como mod | 201 |
 | GET /admin/users/{id}/strikes | lista de strikes |
+| GET /admin/users/search?q=nombre | 200, lista de usuarios que coincidan |
+| GET /admin/users/search?q=nombre como usuario normal | 403 |
+| GET /admin/users/{id}/history | 200, objeto con bans y strikes |
+| GET /admin/users/{id}/history usuario sin historial | 200, bans=[] strikes=[] |

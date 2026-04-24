@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 from app.models.user import UserRole, OAuthProvider
+from app.schemas.island import IslandPublic
 
 
 class UserPublic(BaseModel):
@@ -32,3 +33,16 @@ class UserResponse(BaseModel):
 class UserUpdate(BaseModel):
     username: str | None = None
     avatar_url: str | None = None
+
+
+class UserStats(BaseModel):
+    """Aggregated profile data for a public user view."""
+    id: uuid.UUID
+    username: str
+    avatar_url: str | None
+    rating: float
+    created_at: datetime
+    island: IslandPublic | None
+    total_visits: int
+
+    model_config = ConfigDict(from_attributes=True)

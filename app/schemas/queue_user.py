@@ -17,3 +17,9 @@ class QueueUserResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class QueuePositionResponse(BaseModel):
+    queue_user_id: uuid.UUID
+    status: QueueUserStatus
+    position: int | None  # None when not waiting or skipped

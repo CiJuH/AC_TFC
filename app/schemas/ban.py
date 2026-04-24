@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
+from app.schemas.strike import StrikeResponse
 
 
 class BanCreate(BaseModel):
@@ -22,3 +23,8 @@ class BanResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserHistoryResponse(BaseModel):
+    bans: list[BanResponse]
+    strikes: list[StrikeResponse]

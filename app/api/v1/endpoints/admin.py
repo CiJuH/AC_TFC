@@ -9,8 +9,9 @@ from app.api.v1.helpers import check_auto_ban
 from app.models.user import User
 from app.models.ban import Ban
 from app.models.strike import Strike, StrikeReason
-from app.schemas.ban import BanCreate, BanResponse
+from app.schemas.ban import BanCreate, BanResponse, UserHistoryResponse
 from app.schemas.strike import StrikeResponse
+from app.schemas.user import UserPublic
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -83,6 +84,43 @@ async def get_user_ban(
     if not ban:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No ban found for this user")
     return ban
+
+
+# --- User lookup ---
+
+@router.get("/users/search", response_model=list[UserPublic])
+async def search_users(
+    q: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_mod),
+):
+    """Search users by username (partial match). Mod only."""
+    result = await db.execute(
+        select(User)
+        .where(User.username.ilike(f"%{q}%"), User.is_deleted == False)
+        .order_by(User.username)
+        .limit(20)
+    )
+    return result.scalars().all()
+
+
+@router.get("/users/{user_id}/history", response_model=UserHistoryResponse)
+async def get_user_history(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_mod),
+):
+    """Full ban and strike history for a user. Mod only."""
+    bans = await db.execute(
+        select(Ban).where(Ban.user_id == user_id).order_by(Ban.created_at.desc())
+    )
+    strikes = await db.execute(
+        select(Strike).where(Strike.user_id == user_id).order_by(Strike.created_at.desc())
+    )
+    return UserHistoryResponse(
+        bans=bans.scalars().all(),
+        strikes=strikes.scalars().all(),
+    )
 
 
 # --- Strikes ---

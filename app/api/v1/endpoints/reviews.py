@@ -74,3 +74,12 @@ async def get_review_by_visit(visit_id: uuid.UUID, db: AsyncSession = Depends(ge
     if not review:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No review for this visit")
     return review
+
+
+@router.get("/user/{user_id}", response_model=list[ReviewResponse])
+async def get_reviews_for_user(user_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """All reviews received by a user (host rating history)."""
+    result = await db.execute(
+        select(Review).where(Review.reviewed_id == user_id).order_by(Review.created_at.desc())
+    )
+    return result.scalars().all()
