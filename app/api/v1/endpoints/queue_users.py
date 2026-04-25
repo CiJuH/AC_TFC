@@ -256,14 +256,15 @@ async def get_my_active_queue_status(
 ):
     """Returns the queue the current user is currently waiting in or visiting."""
     result = await db.execute(
-        select(QueueUser).where(
-            QueueUser.user_id == current_user.id,
-            QueueUser.status.in_([
-                QueueUserStatus.waiting,
-                QueueUserStatus.visiting,
-                QueueUserStatus.skipped,
-            ]),
-        )
+        select(QueueUser)
+            .where(QueueUser.user_id == current_user.id)
+            .where(
+                QueueUser.status.in_([
+                    QueueUserStatus.waiting,
+                    QueueUserStatus.visiting,
+                    QueueUserStatus.skipped,
+                ])
+            )
     )
     queue_user = result.scalar_one_or_none()
     if not queue_user:
