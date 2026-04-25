@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.api.v1.dependencies import get_current_user
+from app.api.v1.endpoints.queue_users import _advance_queue
 from app.models.user import User
 from app.models.island import Island
 from app.models.queue import Queue
@@ -111,6 +112,11 @@ async def end_visit(
 
     await db.commit()
     await db.refresh(visit)
+
+    queue = await db.get(Queue, visit.queue_id)
+    if queue:
+        await _advance_queue(db, queue)
+
     return visit
 
 

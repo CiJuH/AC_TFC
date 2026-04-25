@@ -114,6 +114,7 @@ class QueueDetailResponse(BaseModel):
     visiting_count: int   # currently inside the island
     island_id: uuid.UUID
     island_name: str
+    host_user_id: uuid.UUID
     host_name: str
     host_avatar_url: str | None
     host_rating: float

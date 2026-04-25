@@ -35,6 +35,9 @@ intercambiar objetos, visitar islas con catálogos especiales.
   - `admin`: bans (create/lift/get), strikes (create/list), users (search, history)
 - Todo lo implementado en esta fase: concurrent_visitors, exclusion mutua, dodo_code condicional, _advance_queue, close_queue limpia participantes, conteos incluyen skipped
 - Migracion a1b2c3d4e5f6: concurrent_visitors INTEGER NOT NULL DEFAULT 4
+- `PATCH /users/me` comprueba unicidad de username (409 si ya existe)
+- `QueueDetailResponse` incluye `host_user_id` para poder reportar al anfitrión desde la pantalla de detalle
+- `PATCH /queues/{id}/participants/{user_id}` acepta `apply_strike: bool = False`; si True y new_status=kicked, añade Strike(kicked_by_host) y ejecuta auto-ban
 - Siguiente paso: VisitsViewModel + ReviewsViewModel (Android), auto-cierre colas 12h (APScheduler), Discord/Google OAuth
 
 ## Modelo de datos (dbml)
@@ -222,9 +225,18 @@ Table QueueMessage {
 - Commits en inglés con Conventional Commits (feat/fix/refactor/chore/docs)
 - Comentarios en el código en inglés
 
+## Estado actual de la app Android
+- `ui/common/ReportDialog.kt` — diálogo reutilizable de reporte (5 razones: scam, no_show, rude_behavior, cheating, other)
+- `IslandDetailScreen`: botón Flag en header para reportar al anfitrión; botón "Ya me voy" llama a `endVisit` (no `leaveQueue`) cuando el usuario está visitando
+- `HostScreen`: VisitorWithMenu muestra tiempo en isla + opción "Reportar usuario"; HostQueueRow tiene botón Flag para reportar; diálogo de expulsión pregunta si aplicar strike
+- `HomeViewModel` / `HomeAlert`: sealed class que distingue alertas urgentes (dialog) de informativas (snackbar); emite notificaciones del sistema via `NotificationHelper`
+- `ProfileScreen`: error de username duplicado se muestra inline en el campo (rojo), no como snackbar
+- Tiempo en isla del visitante: se calcula en ambas pantallas (IslandDetailScreen y HostScreen) con `now - QueueUser.updated_at`
+
 ## Convenciones de la app Android
 - Todo el texto visible en español, código en inglés
 - "bells" → siempre "bayas"
 - NativeFruit y Hemisphere están en ui/profile/ProfileModels.kt
 - clickableWithFeedback para elementos clickables
 - DEBUG_HAS_ISLAND y DEBUG_IS_IN_ISLAND en HomeModels.kt para simular estados
+- Notificaciones del sistema via `NotificationHelper` (objeto singleton en `ui/notifications/`); canal `acexchanger_queue`; requiere permiso POST_NOTIFICATIONS en Android 13+

@@ -134,11 +134,11 @@ async def join_queue(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You have been kicked from this queue")
         # left or done: allow rejoin by resetting the existing row
 
-    # Check queue capacity (only count waiting/visiting)
+    # Check queue capacity (waiting + skipped only; visiting users are in the island, not the queue)
     count_result = await db.execute(
         select(func.count()).where(
             QueueUser.queue_id == queue_id,
-            QueueUser.status.in_([QueueUserStatus.waiting, QueueUserStatus.visiting]),
+            QueueUser.status.in_([QueueUserStatus.waiting, QueueUserStatus.skipped]),
         )
     )
     if count_result.scalar() >= queue.limit:
@@ -215,10 +215,12 @@ async def update_participant_status(
     queue_id: uuid.UUID,
     user_id: uuid.UUID,
     new_status: QueueUserStatus,
+    apply_strike: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Host-only: change a participant's status (visiting, done, skipped)."""
+    """Host-only: change a participant's status (visiting, done, skipped, kicked).
+    Pass apply_strike=true when kicking to add a kicked_by_host strike."""
     queue = await _get_queue_or_404(db, queue_id)
 
     if not await _is_host(db, queue, current_user.id):
@@ -231,7 +233,7 @@ async def update_participant_status(
     if not entry:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found")
 
-    # Skip flow: second skip → kick + strike
+    # Skip flow: second skip → kick + no_confirmation strike
     if new_status == QueueUserStatus.skipped and entry.status == QueueUserStatus.skipped:
         entry.status = QueueUserStatus.kicked
         db.add(Strike(user_id=user_id, reason=StrikeReason.no_confirmation))
@@ -240,8 +242,11 @@ async def update_participant_status(
         await _advance_queue(db, queue)
     else:
         entry.status = new_status
+        if apply_strike and new_status == QueueUserStatus.kicked:
+            db.add(Strike(user_id=user_id, reason=StrikeReason.kicked_by_host))
         await db.commit()
-        # A slot opened up if the previous status was visiting and the new one frees it
+        if apply_strike and new_status == QueueUserStatus.kicked:
+            await check_auto_ban(db, user_id)
         if new_status in (QueueUserStatus.done, QueueUserStatus.kicked, QueueUserStatus.left):
             await _advance_queue(db, queue)
 
@@ -274,10 +279,11 @@ async def get_my_active_queue_status(
     island = await db.get(Island, queue.island_id)
 
     # Count total active participants (waiting + visiting + skipped)
+    # total = people in queue (waiting + skipped), not counting those already in the island
     total = (await db.execute(
         select(func.count()).where(
             QueueUser.queue_id == queue.id,
-            QueueUser.status.in_([QueueUserStatus.waiting, QueueUserStatus.visiting, QueueUserStatus.skipped]),
+            QueueUser.status.in_([QueueUserStatus.waiting, QueueUserStatus.skipped]),
         )
     )).scalar()
 

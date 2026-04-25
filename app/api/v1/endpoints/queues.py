@@ -216,6 +216,7 @@ async def get_queue_detail(
         visiting_count=visiting_count,
         island_id=island.id,
         island_name=island.island_name,
+        host_user_id=island.user_id,
         host_name=user.username,
         host_avatar_url=user.avatar_url,
         host_rating=user.rating,

@@ -25,6 +25,11 @@ async def update_me(
     current_user: User = Depends(get_current_user),
 ):
     if body.username is not None:
+        existing = (await db.execute(
+            select(User).where(User.username == body.username, User.id != current_user.id)
+        )).scalar_one_or_none()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already taken")
         current_user.username = body.username
     if body.avatar_url is not None:
         current_user.avatar_url = body.avatar_url
