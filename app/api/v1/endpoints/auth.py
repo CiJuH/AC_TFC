@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel
 from passlib.context import CryptContext
 from app.api.v1.dependencies import get_current_user
 from app.db.session import get_db
@@ -28,12 +27,14 @@ GOOGLE_USER_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.username == body.username))
-    if result.scalar_one_or_none():
+    if (await db.execute(select(User).where(User.username == body.username))).scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already taken")
+    if (await db.execute(select(User).where(User.email == body.email))).scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     user = User(
         oauth_provider=OAuthProvider.email,
+        email=body.email,
         username=body.username,
         password_hash=pwd_context.hash(body.password),
     )
@@ -50,10 +51,14 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login")
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(User).where(User.username == body.username, User.oauth_provider == OAuthProvider.email)
-    )
-    user = result.scalar_one_or_none()
+    if "@" in body.username:
+        stmt = select(User).where(User.email == body.username)
+    else:
+        stmt = select(User).where(
+            User.username == body.username,
+            User.oauth_provider == OAuthProvider.email,
+        )
+    user = (await db.execute(stmt)).scalar_one_or_none()
 
     if not user or not user.password_hash or not pwd_context.verify(body.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
@@ -220,7 +225,6 @@ async def logout(
     The refresh token is accepted in the body for forward-compatibility
     (e.g. if a token blacklist is added later).
     """
-    import uuid
     payload = decode_token(body.refresh_token)
     if not payload or payload.get("type") != "refresh":
         raise HTTPException(

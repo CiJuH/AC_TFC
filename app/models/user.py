@@ -41,6 +41,7 @@ class User(UUIDMixin, TimestampMixin, Base):
     password_hash: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     # Profile (populated from OAuth)
+    email: Mapped[str | None] = mapped_column(String(256), unique=True, nullable=True)
     username: Mapped[str] = mapped_column(String(64), nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     rating: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
