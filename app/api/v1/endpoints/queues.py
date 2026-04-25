@@ -9,7 +9,7 @@ from app.models.user import User
 from app.models.island import Island
 from app.models.queue import Queue, QueueStatus, QueueCategory
 from app.models.queue_users import QueueUser, QueueUserStatus
-from app.schemas.queue import QueueCreate, QueueUpdate, QueueResponse
+from app.schemas.queue import QueueBrowseItem, QueueCreate, QueueDetailResponse, QueueUpdate, QueueResponse
 from app.schemas.queue_user import QueuePositionResponse
 
 router = APIRouter(prefix="/queues", tags=["queues"])
@@ -50,17 +50,29 @@ async def get_my_queues(
     return result.scalars().all()
 
 
-@router.get("/explore", response_model=list[QueueResponse])
+@router.get("/explore", response_model=list[QueueBrowseItem])
 async def explore_queues(
     category: QueueCategory | None = None,
     turnip_price_min: int | None = None,
     turnip_price_max: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Active queues with optional filters. Ordered by newest first."""
-    query = select(Queue).where(
-        Queue.closed_at.is_(None),
-        Queue.status == QueueStatus.active,
+    """Active queues with island and host info. Optional filters, ordered by newest first."""
+    participant_count_subq = (
+        select(func.count())
+        .where(
+            QueueUser.queue_id == Queue.id,
+            QueueUser.status.in_([QueueUserStatus.waiting, QueueUserStatus.visiting, QueueUserStatus.skipped]),
+        )
+        .correlate(Queue)
+        .scalar_subquery()
+    )
+
+    query = (
+        select(Queue, Island, User, participant_count_subq.label("queue_count"))
+        .join(Island, Queue.island_id == Island.id)
+        .join(User, Island.user_id == User.id)
+        .where(Queue.closed_at.is_(None), Queue.status == QueueStatus.active)
     )
     if category is not None:
         query = query.where(Queue.category == category)
@@ -68,8 +80,26 @@ async def explore_queues(
         query = query.where(Queue.turnip_price >= turnip_price_min)
     if turnip_price_max is not None:
         query = query.where(Queue.turnip_price <= turnip_price_max)
-    result = await db.execute(query.order_by(Queue.created_at.desc()))
-    return result.scalars().all()
+
+    rows = (await db.execute(query.order_by(Queue.created_at.desc()))).all()
+
+    return [
+        QueueBrowseItem(
+            island_id=island.id,
+            island_name=island.island_name,
+            host_name=user.username,
+            host_avatar_url=user.avatar_url,
+            host_rating=user.rating,
+            queue_id=queue.id,
+            category=queue.category.value,
+            turnip_price=queue.turnip_price,
+            description=queue.description,
+            queue_count=queue_count,
+            queue_limit=queue.limit,
+            concurrent_visitors=queue.concurrent_visitors,
+        )
+        for queue, island, user, queue_count in rows
+    ]
 
 
 @router.get("/turnip-prices", response_model=list[QueueResponse])
@@ -101,11 +131,96 @@ async def create_queue(
     if result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Island already has an open queue")
 
+    # Mutual exclusion: host cannot be a visitor in another queue at the same time
+    visitor_check = await db.execute(
+        select(QueueUser).where(
+            QueueUser.user_id == current_user.id,
+            QueueUser.status.in_([QueueUserStatus.waiting, QueueUserStatus.visiting, QueueUserStatus.skipped]),
+        )
+    )
+    if visitor_check.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No puedes abrir una cola mientras estás en la cola de otra isla"
+        )
+
     queue = Queue(island_id=island.id, **body.model_dump())
     db.add(queue)
     await db.commit()
     await db.refresh(queue)
     return queue
+
+
+@router.get("/{queue_id}/detail", response_model=QueueDetailResponse)
+async def get_queue_detail(
+    queue_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Returns queue info combined with island and host data, plus participant counts.
+    dodo_code is only revealed to the host or to visitors currently inside the island."""
+    queue_count_subq = (
+        select(func.count())
+        .where(
+            QueueUser.queue_id == queue_id,
+            QueueUser.status.in_([QueueUserStatus.waiting, QueueUserStatus.visiting, QueueUserStatus.skipped]),
+        )
+        .scalar_subquery()
+    )
+    visiting_count_subq = (
+        select(func.count())
+        .where(
+            QueueUser.queue_id == queue_id,
+            QueueUser.status == QueueUserStatus.visiting,
+        )
+        .scalar_subquery()
+    )
+
+    result = await db.execute(
+        select(Queue, Island, User, queue_count_subq.label("queue_count"), visiting_count_subq.label("visiting_count"))
+        .join(Island, Queue.island_id == Island.id)
+        .join(User, Island.user_id == User.id)
+        .where(Queue.id == queue_id)
+    )
+    row = result.one_or_none()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Queue not found")
+
+    queue, island, user, queue_count, visiting_count = row
+
+    # Reveal dodo_code only to the host or to a user currently visiting
+    is_host = island.user_id == current_user.id
+    dodo_code: str | None = None
+    if is_host:
+        dodo_code = queue.dodo_code
+    else:
+        my_entry = await db.execute(
+            select(QueueUser).where(
+                QueueUser.queue_id == queue_id,
+                QueueUser.user_id == current_user.id,
+                QueueUser.status == QueueUserStatus.visiting,
+            )
+        )
+        if my_entry.scalar_one_or_none():
+            dodo_code = queue.dodo_code
+
+    return QueueDetailResponse(
+        queue_id=queue.id,
+        status=queue.status.value,
+        category=queue.category.value,
+        turnip_price=queue.turnip_price,
+        description=queue.description,
+        queue_limit=queue.limit,
+        concurrent_visitors=queue.concurrent_visitors,
+        queue_count=queue_count,
+        visiting_count=visiting_count,
+        island_id=island.id,
+        island_name=island.island_name,
+        host_name=user.username,
+        host_avatar_url=user.avatar_url,
+        host_rating=user.rating,
+        dodo_code=dodo_code,
+    )
 
 
 @router.get("/{queue_id}", response_model=QueueResponse)
@@ -146,6 +261,21 @@ async def close_queue(
 
     queue.status = QueueStatus.closed
     queue.closed_at = datetime.now(timezone.utc)
+
+    # Expel all active participants when the host closes the island
+    active = await db.execute(
+        select(QueueUser).where(
+            QueueUser.queue_id == queue_id,
+            QueueUser.status.in_([
+                QueueUserStatus.waiting,
+                QueueUserStatus.visiting,
+                QueueUserStatus.skipped,
+            ]),
+        )
+    )
+    for entry in active.scalars().all():
+        entry.status = QueueUserStatus.left
+
     await db.commit()
     await db.refresh(queue)
     return queue

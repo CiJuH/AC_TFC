@@ -23,6 +23,17 @@ class QueuePositionResponse(BaseModel):
     status: QueueUserStatus
     position: int | None  # None when not waiting or skipped
 
+class QueueParticipantItem(BaseModel):
+    user_id: uuid.UUID
+    username: str
+    avatar_url: str | None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=False)
+
+
 class ActiveQueueStatusResponse(BaseModel):
     queue_user_id: uuid.UUID
     queue_id: uuid.UUID

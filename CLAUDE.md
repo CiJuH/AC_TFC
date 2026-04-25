@@ -1,4 +1,4 @@
-# ACExchanger — Contexto del proyecto
+﻿# ACExchanger — Contexto del proyecto
 
 ## Qué es
 ACExchanger es una app Android para jugadores de Animal Crossing: New Horizons (TFC).
@@ -33,7 +33,9 @@ intercambiar objetos, visitar islas con catálogos especiales.
   - `friendships`: list, send request, update status, delete
   - `reports`: create, list (mod), resolve (mod)
   - `admin`: bans (create/lift/get), strikes (create/list), users (search, history)
-- Siguiente paso: tests manuales (ver lista en docs/tests.md)
+- Todo lo implementado en esta fase: concurrent_visitors, exclusion mutua, dodo_code condicional, _advance_queue, close_queue limpia participantes, conteos incluyen skipped
+- Migracion a1b2c3d4e5f6: concurrent_visitors INTEGER NOT NULL DEFAULT 4
+- Siguiente paso: VisitsViewModel + ReviewsViewModel (Android), auto-cierre colas 12h (APScheduler), Discord/Google OAuth
 
 ## Modelo de datos (dbml)
 ```
@@ -84,6 +86,7 @@ Table Queue {
   -- Queue settings
   status (active/paused/closed)
   limit int (default 10)
+  concurrent_visitors int (default 4, max 7 — límite real de ACNH)
   requires_fee bool
   fee_description str (nullable)
   -- Timestamps
@@ -200,6 +203,10 @@ Table QueueMessage {
 - Las reviews son sobre el usuario (host), no sobre la isla — la visita es el "ticket" que habilita la review
 - Chat existe como entidad propia para guardar `last_message_at` y ordenar conversaciones eficientemente
 - En FastAPI, rutas estáticas (`/explore`, `/me`) deben declararse antes de rutas dinámicas (`/{id}`) si tienen la misma profundidad de path
+- `concurrent_visitors` en Queue es distinto de `limit`: `limit` = tamaño máximo de la cola de espera; `concurrent_visitors` = cuántos pueden estar dentro de la isla a la vez (1–7, límite real de ACNH es 7)
+- Exclusión mutua host↔visitante: un usuario no puede unirse a una cola si tiene una cola activa como host, y viceversa. Se aplica en backend (`join_queue`) y se muestra aviso en frontend
+- El `dodo_code` solo se devuelve a usuarios cuyo `QueueUser.status == "visiting"` en esa cola — el resto no tiene permiso para entrar todavía
+- Tiempo dentro de la isla: se calcula en frontend como `now - QueueUser.updated_at` cuando `status = visiting` (updated_at cambia al transicionar a ese estado); no se almacena como campo separado
 
 ## Mixins disponibles (mixins.py)
 - `UUIDMixin` — añade `id` (UUID primary key)

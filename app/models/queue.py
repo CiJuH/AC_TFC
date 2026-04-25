@@ -40,6 +40,7 @@ class Queue(UUIDMixin, CreatedAtMixin, Base):
     # Queue settings
     status: Mapped[QueueStatus] = mapped_column(SAEnum(QueueStatus), default=QueueStatus.active, nullable=False)
     limit: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
+    concurrent_visitors: Mapped[int] = mapped_column(Integer, default=4, nullable=False)  # max inside island at once (ACNH limit: 7)
 
     # Timestamps
     visit_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True) # Estimated closing time
