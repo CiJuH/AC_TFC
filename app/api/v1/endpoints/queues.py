@@ -62,7 +62,7 @@ async def explore_queues(
         select(func.count())
         .where(
             QueueUser.queue_id == Queue.id,
-            QueueUser.status.in_([QueueUserStatus.waiting, QueueUserStatus.visiting, QueueUserStatus.skipped]),
+            QueueUser.status.in_([QueueUserStatus.waiting, QueueUserStatus.skipped]),
         )
         .correlate(Queue)
         .scalar_subquery()
@@ -163,7 +163,7 @@ async def get_queue_detail(
         select(func.count())
         .where(
             QueueUser.queue_id == queue_id,
-            QueueUser.status.in_([QueueUserStatus.waiting, QueueUserStatus.visiting, QueueUserStatus.skipped]),
+            QueueUser.status.in_([QueueUserStatus.waiting, QueueUserStatus.skipped]),
         )
         .scalar_subquery()
     )

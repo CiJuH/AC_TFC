@@ -33,12 +33,18 @@ intercambiar objetos, visitar islas con catálogos especiales.
   - `friendships`: list, send request, update status, delete
   - `reports`: create, list (mod), resolve (mod)
   - `admin`: bans (create/lift/get), strikes (create/list), users (search, history)
-- Todo lo implementado en esta fase: concurrent_visitors, exclusion mutua, dodo_code condicional, _advance_queue, close_queue limpia participantes, conteos incluyen skipped
 - Migracion a1b2c3d4e5f6: concurrent_visitors INTEGER NOT NULL DEFAULT 4
+- Migración `b2c3d4e5f6a7`: columna `email VARCHAR(256) UNIQUE NULL` en tabla `users`; columnas de usuarios OAuth quedan en NULL
 - `PATCH /users/me` comprueba unicidad de username (409 si ya existe)
 - `QueueDetailResponse` incluye `host_user_id` para poder reportar al anfitrión desde la pantalla de detalle
-- `PATCH /queues/{id}/participants/{user_id}` acepta `apply_strike: bool = False`; si True y new_status=kicked, añade Strike(kicked_by_host) y ejecuta auto-ban
-- Siguiente paso: VisitsViewModel + ReviewsViewModel (Android), auto-cierre colas 12h (APScheduler), Discord/Google OAuth
+- `PATCH /queues/{id}/participants/{user_id}` acepta `apply_strike: bool = False`; si True y new_status=kicked, añade Strike(kicked_by_host) y ejecuta auto-ban; si False, guarda como `left` (puede volver a unirse)
+- `POST /auth/register`: email validado con regex propio (`^[^@\s]+@[^@\s]+\.[^@\s]+$`), sin `email-validator`; unicidad comprobada (409)
+- `POST /auth/login` acepta username o email (detecta por presencia de `@`)
+- `_advance_queue` crea registros `Visit` (con `entered_at=now`) al promover usuarios a `visiting`
+- `POST /visits` (start_visit) es idempotente: devuelve la visita activa existente si `_advance_queue` ya la creó
+- `queue_count` en `/explore` y `GET /{id}` cuenta solo `waiting` + `skipped` (no `visiting` — esos ya están dentro de la isla)
+- `QueueUser.status = kicked` solo cuando hay strike; sin strike → `left` → puede volver a unirse
+- Siguiente paso: auto-cierre colas 12h (APScheduler), Discord/Google OAuth
 
 ## Modelo de datos (dbml)
 ```
@@ -47,6 +53,7 @@ Table User {
   oauth_provider (discord/google/email, nullable)
   oauth_id (nullable)
   password_hash (nullable, solo si email)
+  email str (nullable, unique — obligatorio en registro email/password, null para OAuth)
   username str
   avatar_url str (nullable)
   rating float
@@ -200,7 +207,8 @@ Table QueueMessage {
 - `turnip_price`, `category` y `description` viven en Queue, no en Island — cada cola es un evento con su propio contexto; Island solo guarda la info permanente de la isla
 - `position` en QueueUser no se almacena — orden de cola: `skipped` primero, luego `waiting` por `created_at`
 - `skipped` es un estado temporal (primera vez que se salta a alguien) — si vuelve a ser saltado, pasa a `kicked` + Strike
-- `kicked` es terminal (expulsado tras 2º skip); `left` es salida voluntaria
+- `kicked` es terminal solo si viene con strike (2º skip o expulsión con causa por el host); `left` es salida voluntaria O expulsión sin causa (puede rejoin)
+- `_advance_queue` crea el `Visit` record — `POST /visits` es solo para hosts que quieran iniciar visitas manualmente (idempotente)
 - `expires_at = None` en Ban implica ban permanente — no hay campo `is_permanent`
 - `deleted_at = None` en Island implica isla activa — no hay campo `is_active`
 - Las reviews son sobre el usuario (host), no sobre la isla — la visita es el "ticket" que habilita la review
@@ -227,11 +235,19 @@ Table QueueMessage {
 
 ## Estado actual de la app Android
 - `ui/common/ReportDialog.kt` — diálogo reutilizable de reporte (5 razones: scam, no_show, rude_behavior, cheating, other)
-- `IslandDetailScreen`: botón Flag en header para reportar al anfitrión; botón "Ya me voy" llama a `endVisit` (no `leaveQueue`) cuando el usuario está visitando
-- `HostScreen`: VisitorWithMenu muestra tiempo en isla + opción "Reportar usuario"; HostQueueRow tiene botón Flag para reportar; diálogo de expulsión pregunta si aplicar strike
-- `HomeViewModel` / `HomeAlert`: sealed class que distingue alertas urgentes (dialog) de informativas (snackbar); emite notificaciones del sistema via `NotificationHelper`
-- `ProfileScreen`: error de username duplicado se muestra inline en el campo (rojo), no como snackbar
-- Tiempo en isla del visitante: se calcula en ambas pantallas (IslandDetailScreen y HostScreen) con `now - QueueUser.updated_at`
+- `IslandDetailScreen`: botón Flag para reportar anfitrión; "Ya me voy" llama a `endVisit`; muestra `IslandLeaveReviewDialog` tras salir (si hay `pendingReview` en estado)
+- `IslandDetailViewModel`: extiende `AndroidViewModel`; `leaveIsland()` dispara notificación inmediata + marca `VisitEndTracker`; poll silencioso detecta salidas externas (kick/cierre)
+- `HostScreen`: VisitorWithMenu con tiempo en isla + reportar; HostQueueRow con Flag; diálogo de expulsión con opción de strike
+- `HomeViewModel` / `HomeAlert`: omite `VisitEnded` si `VisitEndTracker.wasRecentlyEnded()` (evita duplicado con IslandDetailViewModel)
+- `VisitEndTracker`: singleton en `HomeModels.kt`; previene notificaciones duplicadas de "visita terminada"
+- `DrawerViewModel`: comprueba reviews recibidas cada 60s; badge dinámico en menú lateral; notificación local al host cuando llega review nueva; `markReviewsAsRead()` guarda timestamp en DataStore
+- `SettingsRepository`: añade `saveLastReviewsViewedAt` / `getLastReviewsViewedAt` (DataStore)
+- `MainScreen`: usa `DrawerViewModel`; badge de Visitas es dinámico; al navegar a Visitas llama `markReviewsAsRead()`
+- `ProfileScreen`: error de username duplicado inline (rojo); muestra reviews recibidas reales (de API)
+- `VisitsScreen`: pull-to-refresh; tab "Recibidas" carga y muestra reviews reales; placeholder "Pulsa para valorar" solo si `leftAt < 12h`; ventana de 12h para dejar review
+- `RegisterScreen`: campos username + email (validación inline `Patterns.EMAIL_ADDRESS`) + contraseña; login acepta "Usuario o correo"
+- `RetrofitClient`: `BASE_URL` dinámico — emulador usa `10.0.2.2`, dispositivo físico usa `LAN_IP` (detección via `Build.FINGERPRINT`/`Build.MODEL`)
+- `parseHttpError` en `AuthViewModel` maneja 422 con `detail` array (extrae `msg`)
 
 ## Convenciones de la app Android
 - Todo el texto visible en español, código en inglés

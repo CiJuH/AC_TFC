@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import case, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from app.models.island import Island
 from app.models.queue import Queue, QueueStatus
 from app.models.queue_users import QueueUser, QueueUserStatus
 from app.models.strike import Strike, StrikeReason
+from app.models.visit import Visit
 from app.schemas.queue_user import QueueParticipantItem, QueueUserResponse, ActiveQueueStatusResponse
 
 router = APIRouter(tags=["queue users"])
@@ -54,8 +56,15 @@ async def _advance_queue(db: AsyncSession, queue: Queue) -> None:
         .limit(slots_available)
     )).scalars().all()
 
+    now = datetime.now(timezone.utc)
     for entry in next_in_line:
         entry.status = QueueUserStatus.visiting
+        db.add(Visit(
+            queue_id=queue.id,
+            island_id=queue.island_id,
+            user_id=entry.user_id,
+            entered_at=now,
+        ))
 
     if next_in_line:
         await db.commit()
@@ -241,7 +250,11 @@ async def update_participant_status(
         await check_auto_ban(db, user_id)
         await _advance_queue(db, queue)
     else:
-        entry.status = new_status
+        if new_status == QueueUserStatus.kicked and not apply_strike:
+            # No-cause removal: store as left so the user can rejoin
+            entry.status = QueueUserStatus.left
+        else:
+            entry.status = new_status
         if apply_strike and new_status == QueueUserStatus.kicked:
             db.add(Strike(user_id=user_id, reason=StrikeReason.kicked_by_host))
         await db.commit()

@@ -66,6 +66,19 @@ async def start_visit(
 
     entry.status = QueueUserStatus.visiting
 
+    # Idempotent: return existing active visit if _advance_queue already created one
+    existing = (await db.execute(
+        select(Visit).where(
+            Visit.queue_id == queue_id,
+            Visit.user_id == user_id,
+            Visit.left_at.is_(None),
+        )
+    )).scalar_one_or_none()
+
+    if existing:
+        await db.commit()
+        return existing
+
     visit = Visit(
         queue_id=queue_id,
         island_id=queue.island_id,
