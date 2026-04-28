@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # CORS
     FRONTEND_URL: str = "http://localhost:3000"
 
+    # mDNS (dev only) — override auto-detected LAN IP if needed
+    LAN_IP: str | None = None
+    PORT: int = 8000
+
     @computed_field
     @property
     def is_dev(self) -> bool:
