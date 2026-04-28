@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,7 +12,8 @@ from app.api.v1.router import api_router
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     if settings.is_dev:
-        start_mdns()
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, start_mdns)
     yield
     if settings.is_dev:
         stop_mdns()
