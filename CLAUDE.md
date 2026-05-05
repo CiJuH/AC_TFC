@@ -44,6 +44,7 @@ intercambiar objetos, visitar islas con catálogos especiales.
 - `POST /visits` (start_visit) es idempotente: devuelve la visita activa existente si `_advance_queue` ya la creó
 - `queue_count` en `/explore` y `GET /{id}` cuenta solo `waiting` + `skipped` (no `visiting` — esos ya están dentro de la isla)
 - `QueueUser.status = kicked` solo cuando hay strike; sin strike → `left` → puede volver a unirse
+- `app/core/mdns.py`: anuncia el servidor en LAN via zeroconf (`_http._tcp.local.`); usa `LAN_IP` del `.env` o autodetecta con socket; se lanza desde el lifespan con `run_in_executor(None, start_mdns)` para no bloquear el event loop async
 - Siguiente paso: auto-cierre colas 12h (APScheduler), Discord/Google OAuth
 
 ## Modelo de datos (dbml)
@@ -246,7 +247,10 @@ Table QueueMessage {
 - `ProfileScreen`: error de username duplicado inline (rojo); muestra reviews recibidas reales (de API)
 - `VisitsScreen`: pull-to-refresh; tab "Recibidas" carga y muestra reviews reales; placeholder "Pulsa para valorar" solo si `leftAt < 12h`; ventana de 12h para dejar review
 - `RegisterScreen`: campos username + email (validación inline `Patterns.EMAIL_ADDRESS`) + contraseña; login acepta "Usuario o correo"
-- `RetrofitClient`: `BASE_URL` dinámico — emulador usa `10.0.2.2`, dispositivo físico usa `LAN_IP` (detección via `Build.FINGERPRINT`/`Build.MODEL`)
+- `RetrofitClient`: `DynamicBaseUrlInterceptor` intercepta todas las peticiones y sustituye host/puerto en runtime; `ApiClient.updateBaseUrl(url)` para actualizar desde cualquier punto; fallback hardcodeado `LAN_IP=192.168.1.89`; emulador usa `10.0.2.2`, dispositivo físico usa `LAN_IP` (detección via `Build.FINGERPRINT`/`Build.MODEL`)
+- `NsdDiscoveryManager` en `ui/settings/`: descubre el servidor en LAN buscando `ACExchanger._http._tcp.local.` via Android NSD
+- `SettingsScreen`: sección "Servidor (testing)" con campo URL manual + botón Detectar (NSD) + Guardar; actualiza `ApiClient` y persiste en DataStore
+- `LoginScreen`: botón "Configurar servidor" (icono engranaje, pie de pantalla) abre diálogo con campo URL + Detectar + Guardar — accesible sin estar logueado
 - `parseHttpError` en `AuthViewModel` maneja 422 con `detail` array (extrae `msg`)
 
 ## Convenciones de la app Android
